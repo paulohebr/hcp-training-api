@@ -8,7 +8,9 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConfigurationProperties(prefix = "hcp")
 public class MainConfig {
-    private String host;
+    private String namespaceHost;
+    private String tenantHost;
+    private String ip;
     private String auth;
     private String schema = "https";
 }

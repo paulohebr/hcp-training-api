@@ -23,22 +23,5 @@ public class HcpDemoApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(HcpDemoApplication.class, args);
 	}
-
-	@Bean
-	public WebClient createWebClient() throws SSLException {
-		SslContext sslContext = SslContextBuilder
-				.forClient()
-				.trustManager(InsecureTrustManagerFactory.INSTANCE)
-				.build();
-		HttpClient client = HttpClient.create().secure(t -> t.sslContext(sslContext));
-		return WebClient.builder().clientConnector(new ReactorClientHttpConnector(client))
-				.filter(ExchangeFilterFunction.ofResponseProcessor(clientResponse -> {
-					if (clientResponse.statusCode().isError()) {
-						return Mono.error(new ResponseStatusException(HttpStatus.valueOf(clientResponse.statusCode().value()), clientResponse.statusCode().getReasonPhrase()));
-					}
-					return Mono.just(clientResponse);
-				}))
-				.build();
-	}
 }
 
