@@ -1,8 +1,9 @@
 package br.gov.prodesp.hcpdemo.model;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
-import java.time.Instant;
+import java.time.ZonedDateTime;
 
 @Data
 public class MyObject {
@@ -10,5 +11,6 @@ public class MyObject {
 
     private String owner;
     private Long id;
-    private Instant signDate;
+
+    private ZonedDateTime signDate;
 }

@@ -1,6 +1,5 @@
 package br.gov.prodesp.hcpdemo.hcpModel;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Builder;
 import lombok.Data;
 import org.springframework.web.reactive.function.client.ClientResponse;
@@ -19,26 +18,19 @@ public class HCPObject {
     private Object annotation;
     private String versionId;
 
-    public static HCPObject.HCPObjectBuilder fromHeaders(ClientResponse.Headers headers, String urlName){
-        long size = Long.parseLong(headers.header("X-HCP-Size").stream()
-                .findFirst().orElseThrow(() -> new RuntimeException("No X-HCP-Size header present")));
+    public static HCPObject.HCPObjectBuilder fromHeaders(ClientResponse.Headers headers, String... path){
 
-        String hash = headers.header("X-HCP-Hash").stream().findFirst()
-                .orElseThrow(() -> new RuntimeException("No X-HCP-Hash header present")).substring(21);
+        String urlName = String.join("/", path);
 
-        Instant created = Instant.ofEpochSecond(Long.parseLong(headers.header("X-HCP-IngestTime").stream()
-                .findFirst().orElseThrow(() -> new RuntimeException("No X-HCP-IngestTime present"))));
+        long size = HCPHeader.fromHeaders(HCPHeader.HCP_SIZE, headers).asLong();
 
-        String changeTimeMilliStr = headers.header("X-HCP-ChangeTimeMilliseconds")
-                .stream().findFirst().orElseThrow(() -> new RuntimeException("No X-HCP-ChangeTimeMilliseconds header present"));
+        String hash = HCPHeader.fromHeaders(HCPHeader.HCP_HASH, headers).asString();
 
-        int dotIndex = changeTimeMilliStr.lastIndexOf(".");
+        Instant created = HCPHeader.fromHeaders(HCPHeader.HCP_INGEST_TIME, headers).asInstant();
 
-        changeTimeMilliStr = changeTimeMilliStr.substring(0, dotIndex);
+        Instant changed = HCPHeader.fromHeaders(HCPHeader.HCP_CHANGE_TIME_MILLISECONDS, headers).asInstant();
 
-        Instant changed = Instant.ofEpochMilli(Long.parseLong(changeTimeMilliStr));
-
-        String versionId = headers.header("X-HCP-VersionId").stream().findFirst().orElseThrow(() -> new RuntimeException("No X-HCP-VersionId header present"));
+        String versionId = HCPHeader.fromHeaders(HCPHeader.HCP_VERSION_ID, headers).asString();
 
         return HCPObject.builder()
                 .urlName(urlName)

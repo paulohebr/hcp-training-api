@@ -21,6 +21,7 @@ import java.util.Locale;
 public class HcpDemoApplication {
 
 	public static void main(String[] args) {
+		Locale.setDefault(new Locale("pt", "BR"));
 		SpringApplication.run(HcpDemoApplication.class, args);
 	}
 }

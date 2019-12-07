@@ -1,11 +1,16 @@
 package br.gov.prodesp.hcpdemo;
 
-import br.gov.prodesp.hcpdemo.hcpModel.HCPDirectory;
-import br.gov.prodesp.hcpdemo.hcpModel.HCPObject;
+import br.gov.prodesp.hcpdemo.hcpModel.*;
+import br.gov.prodesp.hcpdemo.hcpModel.query.request.HCPQueryObject;
+import br.gov.prodesp.hcpdemo.hcpModel.query.request.HCPQueryRequest;
+import br.gov.prodesp.hcpdemo.hcpModel.query.response.HCPQueryResult;
 import br.gov.prodesp.hcpdemo.model.MyObject;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
@@ -31,9 +36,10 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Objects;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -51,6 +57,12 @@ public class MainService {
         xmlMapper = new XmlMapper();
         xmlMapper.findAndRegisterModules();
         xmlMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        xmlMapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(new HCPZonedDateTimeJackson.Serializer());
+        module.addDeserializer(ZonedDateTime.class, new HCPZonedDateTimeJackson.Deserializer());
+        xmlMapper.registerModule(module);
+        xmlMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
     }
 
     public Mono<ResponseEntity<byte[]>> getData(String... path) {
@@ -64,11 +76,11 @@ public class MainService {
                 .exchange()
                 .flatMap(r -> Mono.zip(Mono.just(r.headers()), Mono.just(r.body(BodyExtractors.toDataBuffers()))))
                 .flatMap(r -> {
-                    HCPObject.HCPObjectBuilder hcpObjectBuilder = HCPObject.fromHeaders(r.getT1(), String.join("/", path));
-                    Boolean customMetadataFirst = Boolean.valueOf(r.getT1().header("X-HCP-CustomMetadataFirst").stream().findFirst().orElseThrow(() -> new RuntimeException("no X-HCP-CustomMetadataFirst header present")));
-                    int firstPartSize = Integer.parseInt(Objects.requireNonNull(r.getT1().header("X-HCP-Size").stream().findFirst().orElseThrow(() -> new RuntimeException("no X-HCP-Size header present"))));
+                    HCPObject.HCPObjectBuilder hcpObjectBuilder = HCPObject.fromHeaders(r.getT1(), path);
+                    Boolean customMetadataFirst = HCPHeader.fromHeaders(HCPHeader.HCP_CUSTOM_METADATA_FIRST, r.getT1()).asBoolean();
+                    int firstPartSize = HCPHeader.fromHeaders(HCPHeader.HCP_SIZE, r.getT1()).asInteger();
                     if (customMetadataFirst){
-                        int contentLength = Integer.parseInt(Objects.requireNonNull(r.getT1().header("Content-Length").stream().findFirst().orElseThrow(() -> new RuntimeException("no Content-Length header present"))));
+                        int contentLength = HCPHeader.fromHeaders(HCPHeader.CONTENT_LENGTH, r.getT1()).asInteger();
                         firstPartSize = contentLength - firstPartSize;
                     }
                     return Mono.zip(Mono.just(hcpObjectBuilder), DataBufferUtils.join(r.getT2()), Mono.just(firstPartSize), Mono.just(customMetadataFirst));
@@ -101,8 +113,7 @@ public class MainService {
     }
 
     public Mono<ResponseEntity<Void>> createDirectory(String... path) {
-        LinkedMultiValueMap<String, String> queryParams = new LinkedMultiValueMap<>();
-        queryParams.add("type", "directory");
+        LinkedMultiValueMap<String, String> queryParams = HCPQueryParams.TYPE_DIRECTORY.asMultiValueMap();
         return hcpWebClientService.getAuthorizedWebClientForHCPRest( HttpMethod.PUT, queryParams, path).exchange().flatMap(ClientResponse::toBodilessEntity);
     }
 
@@ -129,7 +140,7 @@ public class MainService {
                 .map(response -> {
                     ClientResponse.Headers headers = response.headers();
                     byte[] data = response.toEntity(byte[].class).map(HttpEntity::getBody).block();
-                    return HCPObject.fromHeaders(headers, String.join("/", path))
+                    return HCPObject.fromHeaders(headers, path)
                             .data(data)
                             .build();
                 });
@@ -138,7 +149,7 @@ public class MainService {
     public Mono<HCPObject> getObjectMetadata(String... path) {
         return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.GET, path)
                 .exchange()
-                .map(response -> HCPObject.fromHeaders(response.headers(), String.join("/", path)).build());
+                .map(response -> HCPObject.fromHeaders(response.headers(), path).build());
     }
 
     public Mono<HCPObject> getObjectMetadataWithAnnotation(String... path) {
@@ -147,7 +158,7 @@ public class MainService {
                 .flatMap(r -> Mono.zip(Mono.just(r.headers()), r.body(BodyExtractors.toMono(byte[].class))))
                 .map(r -> {
                     try {
-                        HCPObject.HCPObjectBuilder hcpObjectBuilder = HCPObject.fromHeaders(r.getT1(), String.join("/", path));
+                        HCPObject.HCPObjectBuilder hcpObjectBuilder = HCPObject.fromHeaders(r.getT1(), path);
                         MyObject myObject = xmlMapper.readValue(r.getT2(), MyObject.class);
                         hcpObjectBuilder.annotation(myObject);
                         return hcpObjectBuilder.build();
@@ -183,13 +194,14 @@ public class MainService {
                 Flux<DataBuffer> content = r.getT1().content();
                 String json = r.getT2().value();
                 MyObject myObject = objectMapper.readValue(json, MyObject.class);
+                String xml = xmlMapper.writeValueAsString(myObject);
                 byte[] bytes = xmlMapper.writeValueAsBytes(myObject);
                 Flux<DataBuffer> annotationBytes = Flux.just(dataBufferFactory.wrap(bytes));
                 Flux<DataBuffer> data = content.concatWith(annotationBytes);
                 BodyInserter<Flux<DataBuffer>, ReactiveHttpOutputMessage> bodyInsert = BodyInserters.fromDataBuffers(data);
                 Long size = Long.valueOf(r.getT3().value());
                 WebClient.RequestBodySpec authorizedWebClientForHCPRest = hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.PUT, wholeObjectQueryParams(MyObject.ANNOTATION), path);
-                authorizedWebClientForHCPRest.header("X-HCP-Size", String.valueOf(size));
+                authorizedWebClientForHCPRest.header(HCPHeader.HCP_SIZE.getHeaderValue(), String.valueOf(size));
                 return authorizedWebClientForHCPRest.body(bodyInsert).exchange().flatMap(ClientResponse::toBodilessEntity);
             } catch (JsonProcessingException e) {
                 throw new RuntimeException(e);
@@ -198,16 +210,36 @@ public class MainService {
     }
 
     private static LinkedMultiValueMap<String, String> wholeObjectQueryParams(String annotation) {
-        LinkedMultiValueMap<String, String> queryParams = new LinkedMultiValueMap<>();
-        queryParams.add("type", "whole-object");
-        queryParams.add("annotation", annotation);
+        LinkedMultiValueMap<String, String> queryParams = HCPQueryParams.TYPE_WHOLE_OBJECT.asMultiValueMap();
+        HCPQueryParams.annotation(annotation).assignTo(queryParams);
         return queryParams;
     }
 
     private static LinkedMultiValueMap<String, String> customMetadataQueryParams(String annotation) {
-        LinkedMultiValueMap<String, String> queryParams = new LinkedMultiValueMap<>();
-        queryParams.add("type", "custom-metadata");
-        queryParams.add("annotation", annotation);
+        LinkedMultiValueMap<String, String> queryParams = HCPQueryParams.TYPE_CUSTOM_METADATA.asMultiValueMap();
+        HCPQueryParams.annotation(annotation).assignTo(queryParams);
         return queryParams;
+    }
+
+    public Mono<HCPQueryResult> testQuery() throws JsonProcessingException {
+        WebClient.RequestBodySpec client = hcpWebClientService.getAuthorizedWebClientForHCPQuery();
+        List<String> properties = new ArrayList<>();
+        properties.add("utf8Name");
+        properties.add("hash");
+//        properties.add("/MyObject/owner");
+        HCPQueryRequest hcpQueryRequest = HCPQueryObject.builder()
+                .query("+(myobjectOwner:Paulo)")
+                .contentProperties(true)
+                .verbose(true)
+//                .objectProperties(properties)
+                .build().toRequest();
+        String xml = xmlMapper.writeValueAsString(hcpQueryRequest);
+        return client.bodyValue(xml).retrieve().bodyToMono(String.class).map(r -> {
+            try {
+                return xmlMapper.readValue(r, HCPQueryResult.class);
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 }
