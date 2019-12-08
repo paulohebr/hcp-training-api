@@ -2,8 +2,6 @@ plugins {
 	id 'org.springframework.boot' version '2.2.1.RELEASE'
 	id 'io.spring.dependency-management' version '1.0.8.RELEASE'
 	id 'java'
-
-//    id "com.virgo47.ClasspathJar" version "1.0.0"
 }
 
 group = 'br.gov.prodesp'
@@ -20,15 +18,10 @@ repositories {
 	mavenCentral()
 }
 
-ext {
-	set('vaadinVersion', "14.0.14")
-}
-
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-webflux'
 	implementation 'com.google.guava:guava:28.1-jre'
 	implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml'
-	implementation 'org.modelmapper:modelmapper:2.3.0'
 	implementation 'com.amazonaws:aws-java-sdk:1.11.44'
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
@@ -37,12 +30,6 @@ dependencies {
 		exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
 	}
 	testImplementation 'io.projectreactor:reactor-test'
-}
-
-dependencyManagement {
-	imports {
-		mavenBom "com.vaadin:vaadin-bom:${vaadinVersion}"
-	}
 }
 
 test {
