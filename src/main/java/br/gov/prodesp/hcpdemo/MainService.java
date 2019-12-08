@@ -1,11 +1,7 @@
 package br.gov.prodesp.hcpdemo;
 
 import br.gov.prodesp.hcpdemo.hcpModel.*;
-import br.gov.prodesp.hcpdemo.hcpModel.query.request.HCPFacet;
-import br.gov.prodesp.hcpdemo.hcpModel.query.request.HCPQueryObject;
 import br.gov.prodesp.hcpdemo.hcpModel.query.request.HCPQueryRequest;
-import br.gov.prodesp.hcpdemo.hcpModel.query.request.expression.HCPExpressionHelper;
-import br.gov.prodesp.hcpdemo.hcpModel.query.request.expression.HCPQueryExpressionBuilder;
 import br.gov.prodesp.hcpdemo.hcpModel.query.response.HCPQueryResult;
 import br.gov.prodesp.hcpdemo.model.MyObject;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -42,7 +38,6 @@ import java.io.InputStream;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 @Slf4j
 @Service
@@ -74,7 +69,25 @@ public class MainService {
                 .flatMap(response -> response.toEntity(byte[].class));
     }
 
-    public Mono<HCPObject> getDataWithAnnotation(String... path) {
+    public Mono<HCPObject> getObjectDataAndMetadata(String... path) {
+        return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.GET, path)
+                .exchange()
+                .map(response -> {
+                    ClientResponse.Headers headers = response.headers();
+                    byte[] data = response.toEntity(byte[].class).map(HttpEntity::getBody).block();
+                    return HCPObject.fromHeaders(headers, path)
+                            .data(data)
+                            .build();
+                });
+    }
+
+    public Mono<HCPObject> getObjectMetadataWithoutData(String... path) {
+        return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.GET, path)
+                .exchange()
+                .map(response -> HCPObject.fromHeaders(response.headers(), path).build());
+    }
+
+    public Mono<HCPObject> getObjectDataAndMetadataAndAnnotation(String... path) {
         return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.GET, wholeObjectQueryParams(MyObject.ANNOTATION), path)
                 .exchange()
                 .flatMap(r -> Mono.zip(Mono.just(r.headers()), Mono.just(r.body(BodyExtractors.toDataBuffers()))))
@@ -115,6 +128,27 @@ public class MainService {
                 });
     }
 
+    public Mono<HCPObject> getObjectMetadataWithAnnotationWithoutData(String... path) {
+        return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.GET, customMetadataQueryParams(MyObject.ANNOTATION), path)
+                .exchange()
+                .flatMap(r -> Mono.zip(Mono.just(r.headers()), r.body(BodyExtractors.toMono(byte[].class))))
+                .map(r -> {
+                    try {
+                        HCPObject.HCPObjectBuilder hcpObjectBuilder = HCPObject.fromHeaders(r.getT1(), path);
+                        MyObject myObject = xmlMapper.readValue(r.getT2(), MyObject.class);
+                        hcpObjectBuilder.annotation(myObject);
+                        return hcpObjectBuilder.build();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+    }
+
+    public Mono<HCPObject> getObjectMetadataWithAnnotationWithoutDataFQDN(String fqdn) {
+        String[] path = hcpWebClientService.extractPath(fqdn);
+        return getObjectMetadataWithAnnotationWithoutData(path);
+    }
+
     public Mono<ResponseEntity<Void>> createDirectory(String... path) {
         LinkedMultiValueMap<String, String> queryParams = HCPQueryParams.TYPE_DIRECTORY.asMultiValueMap();
         return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.PUT, queryParams, path).exchange().flatMap(ClientResponse::toBodilessEntity);
@@ -137,55 +171,11 @@ public class MainService {
                 });
     }
 
-    public Mono<HCPObject> getObject(String... path) {
-        return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.GET, path)
-                .exchange()
-                .map(response -> {
-                    ClientResponse.Headers headers = response.headers();
-                    byte[] data = response.toEntity(byte[].class).map(HttpEntity::getBody).block();
-                    return HCPObject.fromHeaders(headers, path)
-                            .data(data)
-                            .build();
-                });
-    }
-
-    public Mono<HCPObject> getObjectMetadata(String... path) {
-        return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.GET, path)
-                .exchange()
-                .map(response -> HCPObject.fromHeaders(response.headers(), path).build());
-    }
-
-    public Mono<HCPObject> getObjectMetadataWithAnnotationFQDN(String fqdn) {
-        String[] path = hcpWebClientService.extractPath(fqdn);
-        return getObjectMetadataWithAnnotation(path);
-    }
-
-    public Mono<HCPObject> getObjectMetadataWithAnnotation(String... path) {
-        return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.GET, customMetadataQueryParams(MyObject.ANNOTATION), path)
-                .exchange()
-                .flatMap(r -> Mono.zip(Mono.just(r.headers()), r.body(BodyExtractors.toMono(byte[].class))))
-                .map(r -> {
-                    try {
-                        HCPObject.HCPObjectBuilder hcpObjectBuilder = HCPObject.fromHeaders(r.getT1(), path);
-                        MyObject myObject = xmlMapper.readValue(r.getT2(), MyObject.class);
-                        hcpObjectBuilder.annotation(myObject);
-                        return hcpObjectBuilder.build();
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
-    }
-
-    public Mono<ClientResponse> postData(InputStream data, String... path) throws IOException {
+    public Mono<ClientResponse> postData(InputStream data, String... path) {
         return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.PUT, path)
 //                .header("Content-Length", String.valueOf(data.available()))
                 .body(BodyInserters.fromResource(new InputStreamResource(data)))
                 .exchange();
-    }
-
-    public Mono<ResponseEntity<Void>> delete(String... path) {
-        return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.DELETE, path)
-                .exchange().flatMap(ClientResponse::toBodilessEntity);
     }
 
     public Mono<ResponseEntity<Void>> postData(Mono<FilePart> file, String... path) {
@@ -218,6 +208,11 @@ public class MainService {
                 throw new RuntimeException(e);
             }
         });
+    }
+
+    public Mono<ResponseEntity<Void>> delete(String... path) {
+        return hcpWebClientService.getAuthorizedWebClientForHCPRest(HttpMethod.DELETE, path)
+                .exchange().flatMap(ClientResponse::toBodilessEntity);
     }
 
     private static LinkedMultiValueMap<String, String> wholeObjectQueryParams(String annotation) {

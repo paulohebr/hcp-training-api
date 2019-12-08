@@ -35,17 +35,17 @@ public class MainController {
 
     @GetMapping("metadata/**")
     public Mono<HCPObject> metadata(ServerHttpRequest request) {
-        return mainService.getObjectMetadata(pathFromElements(request.getPath().elements()));
+        return mainService.getObjectMetadataWithoutData(pathFromElements(request.getPath().elements()));
     }
 
     @GetMapping("metadata-annotation/**")
     public Mono<HCPObject> metadataWithAnnotation(ServerHttpRequest request) {
-        return mainService.getObjectMetadataWithAnnotation(pathFromElements(request.getPath().elements()));
+        return mainService.getObjectMetadataWithAnnotationWithoutData(pathFromElements(request.getPath().elements()));
     }
 
     @GetMapping("metadata-annotation-url-name")
     public Mono<HCPObject> metadataWithAnnotationFQDN(@RequestParam("fqdn") String fqdn){
-        return mainService.getObjectMetadataWithAnnotationFQDN(fqdn);
+        return mainService.getObjectMetadataWithAnnotationWithoutDataFQDN(fqdn);
     }
 
     @GetMapping("directory/**")
@@ -63,7 +63,7 @@ public class MainController {
         String[] pathElements = pathFromElements(request.getPath().elements());
         return mainService.getDirectory(pathElements)
                 .flatMapMany(r -> Flux.fromIterable(r.getEntries()).filter(i -> i.getType().equals("object")))
-                .flatMap(i -> mainService.getObjectMetadata(ObjectArrays.concat(pathElements, i.getUrlName()))).collectList().map(r -> {
+                .flatMap(i -> mainService.getObjectMetadataWithoutData(ObjectArrays.concat(pathElements, i.getUrlName()))).collectList().map(r -> {
                     HCPDirectoryMetadata hcpDirectoryMetadata = new HCPDirectoryMetadata();
                     hcpDirectoryMetadata.setPath(String.join("/", pathElements));
                     hcpDirectoryMetadata.setObjects(r);

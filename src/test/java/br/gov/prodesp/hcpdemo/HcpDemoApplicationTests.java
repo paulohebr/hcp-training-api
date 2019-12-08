@@ -1,6 +1,7 @@
 package br.gov.prodesp.hcpdemo;
 
 import br.gov.prodesp.hcpdemo.hcpModel.HCPDirectory;
+import br.gov.prodesp.hcpdemo.hcpModel.HCPEndpoint;
 import br.gov.prodesp.hcpdemo.hcpModel.HCPEntry;
 import br.gov.prodesp.hcpdemo.hcpModel.HCPObject;
 import br.gov.prodesp.hcpdemo.hcpModel.query.request.HCPFacet;
@@ -12,19 +13,14 @@ import br.gov.prodesp.hcpdemo.hcpModel.query.response.HCPStatus;
 import br.gov.prodesp.hcpdemo.model.MyObject;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.io.ByteStreams;
-import com.google.common.io.Files;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.http.codec.multipart.FilePart;
-import org.springframework.http.codec.multipart.Part;
+import org.springframework.test.web.reactive.server.EntityExchangeResult;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.BodyInserters;
@@ -39,10 +35,10 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.mock;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 @SpringBootTest(classes = HcpDemoApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureWebTestClient
@@ -75,7 +71,7 @@ class HcpDemoApplicationTests {
 
     @Test
     void objectWithAnnotation() {
-        Mono<HCPObject> dataWithAnnotation = mainService.getDataWithAnnotation("InstallerSmallBanner.bmp");
+        Mono<HCPObject> dataWithAnnotation = mainService.getObjectDataAndMetadataAndAnnotation("InstallerSmallBanner.bmp");
         StepVerifier.create(dataWithAnnotation).expectSubscription().consumeNextWith(r -> {
             Object annotation = r.getAnnotation();
             Assertions.assertEquals(MyObject.class, annotation.getClass());
@@ -85,7 +81,7 @@ class HcpDemoApplicationTests {
         }).expectComplete().verify();
     }
 
-    byte[] getImage(MyObject myObject) {
+    byte[] generateImage(MyObject myObject) {
         Font font = new Font("Arial", Font.PLAIN, 48);
         BufferedImage image = DemoHelper.textToImage(myObject.getOwner(), font, 100);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -97,52 +93,9 @@ class HcpDemoApplicationTests {
         return outputStream.toByteArray();
     }
 
-    MyObject getMyObject() {
-        String user = "Paulo";
-        ZonedDateTime zonedDateTime = ZonedDateTime.now();
-        MyObject myObject = new MyObject();
-        myObject.setId(1L);
-        myObject.setOwner(user);
-        myObject.setSignDate(zonedDateTime);
-        return myObject;
-    }
-
-    Mono<FilePart> getFilePart(byte[] bytes) {
-        Flux<DataBuffer> dataBufferFlux = Flux.just(new DefaultDataBufferFactory().wrap(bytes));
-        FilePart fileMock = mock(FilePart.class);
-        given(fileMock.content()).willReturn(dataBufferFlux);
-        return Mono.just(fileMock);
-    }
-
-    @Test
-    void testImageFilePartMono() {
-        MyObject myObject = getMyObject();
-        String filename = myObject.getOwner() + "-sign.png";
-        File file = new File("C:\\tmp2\\" + filename);
-        byte[] bytes = getImage(myObject);
-        Mono<FilePart> image = getFilePart(bytes);
-        Flux<DataBuffer> dataBufferFlux = image.flatMapMany(Part::content);
-        StepVerifier.create(dataBufferFlux).consumeNextWith(r -> {
-            Assertions.assertNotNull(r);
-            try {
-                byte[] writeBytes = ByteStreams.toByteArray(r.asInputStream());
-                //noinspection UnstableApiUsage
-                Files.write(writeBytes, file);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }).expectComplete().verify();
-    }
-
-    @Test
-    void uploadToController() {
-        MyObject myObject = getMyObject();
-        uploadToController(myObject);
-    }
-
     private void uploadToController(MyObject myObject) {
         String filename = myObject.getOwner() + "-sign.png";
-        byte[] bytes = getImage(myObject);
+        byte[] bytes = generateImage(myObject);
         MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
         bodyBuilder.part("file", bytes).filename(filename).contentType(MediaType.IMAGE_PNG);
         try {
@@ -181,40 +134,81 @@ class HcpDemoApplicationTests {
     }
 
     @Test
-    void directoryWithMetadata() {
-        webClient.get()
-                .uri("/directory/demo/")
-                .exchange()
-                .expectBody(HCPDirectory.class)
-                .consumeWith(r -> {
-                    HCPDirectory hcpDirectory = r.getResponseBody();
-                    Assertions.assertNotNull(hcpDirectory);
-                    Assertions.assertNotNull(hcpDirectory.getEntries());
-                });
+    void getDirectory() {
+        directoryContent("/demo", r -> {
+            HCPDirectory hcpDirectory = r.getResponseBody();
+            Assertions.assertNotNull(hcpDirectory);
+            Assertions.assertNotNull(hcpDirectory.getEntries());
+        });
     }
 
     @Test
-    void deleteAll() {
+    void deleteAllObjects() {
+        directoryContent("/", deleteObjectsConsumer());
+    }
+
+    @Test
+    void deleteAllDirectories() {
+        directoryContent("/", deleteDirectoriesConsumer());
+    }
+
+    private Consumer<EntityExchangeResult<HCPDirectory>> deleteDirectoriesConsumer() {
+        return r -> {
+            Assertions.assertNotNull(r);
+            HCPDirectory hcpDirectory = r.getResponseBody();
+            Assertions.assertNotNull(hcpDirectory);
+            Assertions.assertNotNull(hcpDirectory.getEntries());
+            String directoryPath = hcpDirectory.getUtf8Path();
+            Assertions.assertNotNull(directoryPath);
+            String path = Arrays.stream(directoryPath.split("/")).filter(s -> !s.equals(HCPEndpoint.REST.getEndpoint())).collect(Collectors.joining("/")) + "/";
+            for (HCPEntry entry : hcpDirectory.getEntries()) {
+                String urlName = path + entry.getUtf8Name();
+                if (entry.getType().equals("directory") && !urlName.equals("/.lost+found")){
+                    delete(urlName);
+                }
+            }
+        };
+    }
+
+    private void directoryContent(String uri, Consumer<EntityExchangeResult<HCPDirectory>> consumer) {
+        uri = "/directory" + uri;
         webClient
                 .get()
-                .uri("/directory/")
+                .uri(uri)
                 .exchange()
                 .expectBody(HCPDirectory.class)
-                .consumeWith(r -> {
-                    HCPDirectory hcpDirectory = r.getResponseBody();
-                    Assertions.assertNotNull(hcpDirectory);
-                    Assertions.assertNotNull(hcpDirectory.getEntries());
-                    for (HCPEntry entry : hcpDirectory.getEntries()) {
-                        if (entry.getType().equals("object")) {
-                            webClient
-                                    .delete()
-                                    .uri("/delete/" + entry.getUrlName())
-                                    .exchange()
-                                    .expectStatus().isOk();
-                        }
-                    }
-                });
+                .consumeWith(consumer);
     }
+
+    private Consumer<EntityExchangeResult<HCPDirectory>> deleteObjectsConsumer() {
+        return r -> {
+            Assertions.assertNotNull(r);
+            HCPDirectory hcpDirectory = r.getResponseBody();
+            Assertions.assertNotNull(hcpDirectory);
+            String directoryPath = hcpDirectory.getUtf8Path();
+            Assertions.assertNotNull(directoryPath);
+            String path = Arrays.stream(directoryPath.split("/")).filter(s -> !s.equals(HCPEndpoint.REST.getEndpoint())).collect(Collectors.joining("/")) + "/";
+            Assertions.assertNotNull(hcpDirectory.getEntries());
+            for (HCPEntry entry : hcpDirectory.getEntries()) {
+                String urlName = path + entry.getUtf8Name();
+                if (entry.getType().equals("directory") && !urlName.equals("/.lost+found")) {
+                    directoryContent(urlName, deleteObjectsConsumer());
+                }
+                if (entry.getType().equals("object")) {
+                    delete(urlName);
+                }
+            }
+        };
+    }
+
+    private void delete(String urlName) {
+        webClient
+                .delete()
+                .uri("/delete" + urlName)
+                .exchange()
+                .expectStatus().isOk();
+    }
+
 
     @Test
     void query() throws JsonProcessingException {
@@ -243,7 +237,8 @@ class HcpDemoApplicationTests {
                 .facets(facets)
                 .sort(sorts)
                 .objectProperties(properties)
-                .count(20)
+                .count(10)
+//                .offset(10L)
                 .build().toRequest();
         Mono<Tuple2<HCPStatus, List<HCPObject>>> mono = mainService
                 .query(hcpQueryRequest)
@@ -256,7 +251,7 @@ class HcpDemoApplicationTests {
                             .flatMap(r2 -> {
                                 Assertions.assertNotNull(r2);
                                 Assertions.assertFalse(StringUtils.isEmpty(r2.getUrlName()));
-                                return mainService.getObjectMetadataWithAnnotationFQDN(r2.getUrlName());
+                                return mainService.getObjectMetadataWithAnnotationWithoutDataFQDN(r2.getUrlName());
                             })
                             .collectList();
                     return Mono.zip(Mono.just(r.getStatus()), hcpObjectListMono);
