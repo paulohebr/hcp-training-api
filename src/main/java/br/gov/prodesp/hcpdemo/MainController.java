@@ -43,6 +43,11 @@ public class MainController {
         return mainService.getObjectMetadataWithAnnotation(pathFromElements(request.getPath().elements()));
     }
 
+    @GetMapping("metadata-annotation-url-name")
+    public Mono<HCPObject> metadataWithAnnotationFQDN(@RequestParam("fqdn") String fqdn){
+        return mainService.getObjectMetadataWithAnnotationFQDN(fqdn);
+    }
+
     @GetMapping("directory/**")
     public Mono<HCPDirectory> directory(ServerHttpRequest request) {
         return mainService.getDirectory(pathFromElements(request.getPath().elements()));

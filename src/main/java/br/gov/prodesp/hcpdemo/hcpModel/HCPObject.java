@@ -19,25 +19,17 @@ public class HCPObject {
     private String versionId;
 
     public static HCPObject.HCPObjectBuilder fromHeaders(ClientResponse.Headers headers, String... path){
-
-        String urlName = String.join("/", path);
-
-        long size = HCPHeader.fromHeaders(HCPHeader.HCP_SIZE, headers).asLong();
-
-        String hash = HCPHeader.fromHeaders(HCPHeader.HCP_HASH, headers).asString();
-
-        Instant created = HCPHeader.fromHeaders(HCPHeader.HCP_INGEST_TIME, headers).asInstant();
-
-        Instant changed = HCPHeader.fromHeaders(HCPHeader.HCP_CHANGE_TIME_MILLISECONDS, headers).asInstant();
-
-        String versionId = HCPHeader.fromHeaders(HCPHeader.HCP_VERSION_ID, headers).asString();
-
-        return HCPObject.builder()
-                .urlName(urlName)
-                .size(size)
-                .hash(hash)
-                .created(created)
-                .changed(changed)
-                .versionId(versionId);
+        HCPObjectBuilder builder = HCPObject.builder();
+        builder.urlName(String.join("/", path));
+        builder.size(HCPHeader.fromHeaders(HCPHeader.HCP_SIZE, headers).asLong());
+        builder.hash(HCPHeader.fromHeaders(HCPHeader.HCP_HASH, headers).asString());
+        try {
+            builder.created(HCPHeader.fromHeaders(HCPHeader.HCP_INGEST_TIME, headers).asInstant());
+        } catch (HCPHeader.HCPHeaderException ignored){}
+        builder.changed(HCPHeader.fromHeaders(HCPHeader.HCP_CHANGE_TIME_MILLISECONDS, headers).asInstant());
+        try {
+            builder.versionId(HCPHeader.fromHeaders(HCPHeader.HCP_VERSION_ID, headers).asString());
+        } catch (HCPHeader.HCPHeaderException ignored){}
+        return builder;
     }
 }

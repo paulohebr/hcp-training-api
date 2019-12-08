@@ -10,8 +10,10 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ResponseStatusException;
@@ -21,6 +23,7 @@ import reactor.netty.http.client.HttpClient;
 
 import javax.net.ssl.SSLException;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.function.Function;
 
 @Service
@@ -85,5 +88,15 @@ public class HcpWebClientService {
             }
             return uriBuilder.build();
         };
+    }
+
+    public String[] extractPath(String fqdn) {
+        String prefix = HCPConfig.getSchema() + "://" + HCPConfig.getNamespaceHostname();
+        int i = fqdn.indexOf(prefix);
+        if (i < 0){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "invalid fqdn " + fqdn);
+        }
+        String substring = fqdn.replace(prefix, "");
+        return Arrays.stream(substring.split("/")).filter(s -> !StringUtils.isEmpty(s)).filter(s -> !s.equals(HCPEndpoint.REST.getEndpoint())).toArray(String[]::new);
     }
 }

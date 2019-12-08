@@ -20,6 +20,33 @@ public class HCPDirectory {
     @JacksonXmlProperty(isAttribute = true)
     private String path;
 
+    @JacksonXmlProperty(isAttribute = true)
+    private String utf8Path;
+
+    @JacksonXmlProperty(isAttribute = true)
+    private String parentDir;
+
+    @JacksonXmlProperty(isAttribute = true)
+    private String utf8ParentDir;
+
+    @JacksonXmlProperty(isAttribute = true)
+    private Boolean dirDeleted;
+
+    @JacksonXmlProperty(isAttribute = true)
+    private Boolean showDeleted;
+
+    @JacksonXmlProperty(isAttribute = true)
+    private String namespaceName;
+
+    @JacksonXmlProperty(isAttribute = true)
+    private String utf8NamespaceName;
+
+    @JacksonXmlProperty(isAttribute = true)
+    private String changeTimeMilliseconds;
+
+    @JacksonXmlProperty(isAttribute = true)
+    private String changeTimeString;
+
     public static HCPDirectory error(String path) {
         HCPDirectory hcpDirectory = new HCPDirectory();
         ArrayList<HCPEntry> entries = new ArrayList<>();

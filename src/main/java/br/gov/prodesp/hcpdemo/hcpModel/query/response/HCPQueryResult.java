@@ -12,4 +12,5 @@ public class HCPQueryResult {
     private List<HCPResult> resultSet;
     private HCPStatus status;
     private List<HCPContentProperty> contentProperties;
+    private List<HCPFacetResult> facets;
 }

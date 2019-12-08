@@ -16,7 +16,7 @@ import java.time.format.DateTimeFormatter;
 
 public class HCPZonedDateTimeJackson {
 
-    private static DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+    public static DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
 
     public static class Serializer extends StdSerializer<ZonedDateTime> {
 
