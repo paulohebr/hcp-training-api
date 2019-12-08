@@ -1,7 +1,5 @@
 package br.gov.prodesp.hcpdemo.hcpModel;
 
-import lombok.Data;
-
 public enum HCPEndpoint {
     REST("rest"),
     QUERY("query");

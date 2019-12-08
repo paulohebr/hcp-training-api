@@ -14,6 +14,10 @@ public class HCPConfig {
     private String ip;
     private String auth;
     private String schema = "https";
+    private String username;
+    private String password;
+    private String userId;
+    private String bucketName;
 
     public String getTenantHostname(){
         return tenant + "." + hostname;
@@ -21,5 +25,9 @@ public class HCPConfig {
 
     public String getNamespaceHostname(){
         return namespace + "." + getTenantHostname();
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
     }
 }

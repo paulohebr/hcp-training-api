@@ -227,15 +227,19 @@ public class MainService {
         return queryParams;
     }
 
-    public Mono<HCPQueryResult> query(HCPQueryRequest hcpQueryRequest) throws JsonProcessingException {
-        WebClient.RequestBodySpec client = hcpWebClientService.getAuthorizedWebClientForHCPQuery();
-        String xml = xmlMapper.writeValueAsString(hcpQueryRequest);
-        return client.bodyValue(xml).retrieve().bodyToMono(String.class).map(r -> {
-            try {
-                return xmlMapper.readValue(r, HCPQueryResult.class);
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException(e);
-            }
-        });
+    public Mono<HCPQueryResult> query(HCPQueryRequest hcpQueryRequest) {
+        try {
+            WebClient.RequestBodySpec client = hcpWebClientService.getAuthorizedWebClientForHCPQuery();
+            String xml = xmlMapper.writeValueAsString(hcpQueryRequest);
+            return client.bodyValue(xml).retrieve().bodyToMono(String.class).map(r -> {
+                try {
+                    return xmlMapper.readValue(r, HCPQueryResult.class);
+                } catch (JsonProcessingException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

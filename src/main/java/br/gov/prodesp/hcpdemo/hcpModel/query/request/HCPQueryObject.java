@@ -35,7 +35,7 @@ public class HCPQueryObject {
     private Boolean verbose;
 
     public HCPQueryRequest toRequest() {
-        return new HCPQueryRequest(this);
+        return new HCPQueryRequest(this, null);
     }
 
     public static class Serializer extends StdSerializer<HCPQueryObject> {
